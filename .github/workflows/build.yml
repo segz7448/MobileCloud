@@ -30,7 +30,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm install --legacy-peer-deps
 
       - name: Install Expo modules
         run: npx install-expo-modules@latest --non-interactive || true
@@ -49,19 +49,17 @@ jobs:
 
       - name: Generate debug keystore
         run: |
-          if [ ! -f android/app/debug.keystore ]; then
-            keytool -genkey -v \
-              -keystore android/app/debug.keystore \
-              -alias androiddebugkey \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          keytool -genkey -v \
+            -keystore android/app/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Make Gradle executable
-  run: |
-    chmod +x android/gradlew
-    chmod +x android/gradle/wrapper/gradle-wrapper.jar
+        run: |
+          chmod +x android/gradlew
+          chmod +x android/gradle/wrapper/gradle-wrapper.jar
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -100,9 +98,5 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           name: MobileCloud v1.0.${{ github.run_number }}
           files: output/MobileCloud-v${{ github.run_number }}.apk
-          body: |
-            ## MobileCloud APK
-            Built from commit ${{ github.sha }}
-            Download and install on your Android device.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
