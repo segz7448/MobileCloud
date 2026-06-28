@@ -37,17 +37,23 @@ jobs:
       - name: Build APK with Gradle
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Locate APK
-        run: find android/app/build/outputs/apk -name "*.apk"
+      - name: Debug build output
+        run: |
+          echo "--- Listing android/app/build (up to 4 levels) ---"
+          find android/app/build -maxdepth 4 2>&1  echo "build dir doesn't exist at all"
+          echo "--- Listing android/app/build/outputs if present ---"
+          find android/app/build/outputs 2>&1  echo "outputs dir doesn't exist"
 
       - name: Upload APK artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: MobileCloud-APK-${{ github.run_number }}
           path: android/app/build/outputs/apk/release/*.apk
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
