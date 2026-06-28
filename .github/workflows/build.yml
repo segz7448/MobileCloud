@@ -54,7 +54,7 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK (with JS bundling)
+      - name: Build Debug APK
         run: |
           cd android
           ./gradlew :app:bundleDebugJsAndAssets :app:assembleDebug \
@@ -63,16 +63,27 @@ jobs:
             --info \
             --rerun-tasks \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
+          echo "=== Build output directory ==="
+          find app/build/outputs -type f 2>/dev/null | head -30 || echo "No outputs dir"
 
-      - name: Locate APK
+      - name: Locate and validate APK
         run: |
-          APK=$(find / -name "*.apk" -type f 2>/dev/null | grep -v proc | head -1)
+          echo "=== Searching android/ only ==="
+          find android -name "*.apk" -type f 2>/dev/null || echo "None in android/"
+          APK=$(find android -name "*.apk" -type f | head -1)
           if [ -z "$APK" ]; then
-            echo "ERROR: No APK found"
-            find android/app/build -type f 2>/dev/null | head -30 || echo "No build dir"
+            echo "ERROR: No APK in android/ build output"
+            echo "=== Full gradle build dir ==="
+            find android/app/build -type f 2>/dev/null | head -50
             exit 1
           fi
-          echo "APK: $APK ($(ls -lh "$APK" | awk '{print $5}'))"
+          SIZE=$(wc -c < "$APK")
+          echo "APK: $APK ($SIZE bytes)"
+          if [ "$SIZE" -lt 500000 ]; then
+            echo "WARNING: APK is only ${SIZE} bytes - may be missing JS bundle"
+            echo "Checking for bundle in build dir..."
+            find android/app/build -name "*.bundle" 2>/dev/null || echo "No bundle found"
+          fi
           echo "APK_PATH=$APK" >> $GITHUB_ENV
 
       - name: Copy APK to output
