@@ -19,7 +19,12 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
       - name: Generate fresh Android folder
-        run: npx react-native init TempApp --skip-install && cp -r TempApp/android ./android && rm -rf TempApp
+        run: |
+          npx react-native init TempApp --skip-install
+          ls -la
+          ls -la TempApp/ || true
+          cp -r TempApp/android ./android
+          rm -rf TempApp
       - name: Generate debug keystore
         working-directory: ./android/app
         run: |
