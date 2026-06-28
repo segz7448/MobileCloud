@@ -1,7 +1,4 @@
 node_modules/
-android/.gradle/
-android/app/build/
-android/build/
 *.log
 .DS_Store
 .idea/
@@ -9,5 +6,3 @@ android/build/
 dist/
 output/
 .env
-android/
-android/
