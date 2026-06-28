@@ -21,6 +21,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'npm'
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -34,9 +35,9 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Restore settings.gradle
+      - name: Write settings.gradle
         run: |
-          cat > android/settings.gradle << 'SETTINGSEOF'
+          cat > android/settings.gradle << 'EOF'
           pluginManagement {
               includeBuild("../node_modules/@react-native/gradle-plugin")
           }
@@ -45,34 +46,63 @@ jobs:
           rootProject.name = 'mobilecloud'
           include ':app'
           includeBuild('../node_modules/@react-native/gradle-plugin')
-          SETTINGSEOF
+          EOF
+          # Strip leading whitespace from heredoc
+          sed -i 's/^          //' android/settings.gradle
+          echo "=== settings.gradle ==="
+          cat android/settings.gradle
 
       - name: Generate debug keystore
         run: |
-          keytool -genkey -v \
-            -keystore android/app/debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US"
+          if [ ! -f android/app/debug.keystore ]; then
+            keytool -genkey -v \
+              -keystore android/app/debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Build Release APK
+      - name: Bundle JS (React Native)
+        run: |
+          mkdir -p android/app/src/main/assets
+          node node_modules/.bin/react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res/ \
+            --reset-cache || true
+
+      - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon --stacktrace \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
+            2>&1 | tail -100
 
       - name: Find APK
-        run: find android -name "*.apk" | tee apk_path.txt
+        run: |
+          echo "=== Searching for APKs ==="
+          find android -name "*.apk" -type f
+          APK_COUNT=$(find android -name "*.apk" -type f | wc -l)
+          echo "Found $APK_COUNT APK(s)"
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "ERROR: No APK was produced!"
+            exit 1
+          fi
 
       - name: Copy APK to output
         run: |
           mkdir -p output
-          find android -name "*.apk" -exec cp {} output/MobileCloud-v${{ github.run_number }}.apk \;
-          ls -la output/
+          find android -name "*.apk" -type f -exec cp {} output/MobileCloud-v${{ github.run_number }}.apk \;
+          ls -lh output/
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -82,10 +112,11 @@ jobs:
           retention-days: 30
 
       - name: Create GitHub Release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: MobileCloud v1.0.${{ github.run_number }}
           files: output/MobileCloud-v${{ github.run_number }}.apk
           token: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_unmatched_files: true
