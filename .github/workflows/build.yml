@@ -55,24 +55,35 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK (Gradle bundles JS internally)
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          NODE_ENV: production
+      - name: List Gradle tasks for :app
+        run: |
+          cd android
+          ./gradlew :app:tasks --all --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx2g" 2>&1 | grep -E "(assemble|bundle|package)" | head -30 || true
+
+      - name: Build Debug APK
         run: |
           cd android
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
+            --info \
             --rerun-tasks \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
+            2>&1 | grep -E "(BUILD|FAILURE|SUCCESS|APK|apk|Error|error:|Caused by)" | tail -60
+          echo "=== Exit code: $? ==="
+          echo "=== Full filesystem APK search ==="
+          find / -name "*.apk" -type f 2>/dev/null | grep -v proc || echo "No APKs anywhere"
+          echo "=== android/app/build exists? ==="
+          ls -la android/app/build/ 2>/dev/null || echo "No build dir"
+          echo "=== android/app/build/outputs? ==="
+          find android/app/build -type f 2>/dev/null | head -50 || echo "Empty"
 
       - name: Find and verify APK
         run: |
-          APK_PATH=$(find android -name "*.apk" -type f | head -1)
+          APK_PATH=$(find / -name "*.apk" -type f 2>/dev/null | grep -v proc | head -1)
           if [ -z "$APK_PATH" ]; then
-            echo "ERROR: No APK produced"
-            find android/app/build -type d 2>/dev/null | head -20
+            echo "ERROR: No APK produced anywhere on filesystem"
             exit 1
           fi
           echo "APK: $APK_PATH"
@@ -81,7 +92,7 @@ jobs:
       - name: Copy APK to output
         run: |
           mkdir -p output
-          find android -name "*.apk" -type f -exec cp {} output/MobileCloud-v${{ github.run_number }}.apk \;
+          find / -name "*.apk" -type f 2>/dev/null | grep -v proc | head -1 | xargs -I{} cp {} output/MobileCloud-v${{ github.run_number }}.apk
           ls -lh output/
 
       - name: Upload APK artifact
