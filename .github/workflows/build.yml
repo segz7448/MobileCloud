@@ -38,6 +38,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
+          chmod +x gradle/wrapper/gradle-wrapper.jar
           ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload APK artifact
