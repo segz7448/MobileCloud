@@ -1,4 +1,17 @@
 {
-  "name": "mobilecloud",
-  "displayName": "MobileCloud"
+  "expo": {
+    "name": "MobileCloud",
+    "slug": "mobilecloud",
+    "version": "1.0.0",
+    "owner": "segz7448",
+    "extra": {
+      "eas": {
+        "projectId": "5098a671-781d-4bec-b9ca-eceb734b4890"
+      }
+    },
+    "android": {
+      "package": "com.mobilecloud",
+      "versionCode": 1
+    }
+  }
 }
