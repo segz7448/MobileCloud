@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: Build Release APK
@@ -43,7 +46,6 @@ jobs:
           include ':app'
           includeBuild('../node_modules/@react-native/gradle-plugin')
           SETTINGSEOF
-          echo "settings.gradle restored"
 
       - name: Generate debug keystore
         run: |
@@ -63,11 +65,20 @@ jobs:
           ./gradlew assembleRelease --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
 
+      - name: Find APK
+        run: find android -name "*.apk" | tee apk_path.txt
+
+      - name: Copy APK to output
+        run: |
+          mkdir -p output
+          find android -name "*.apk" -exec cp {} output/MobileCloud-v${{ github.run_number }}.apk \;
+          ls -la output/
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: MobileCloud-APK-${{ github.run_number }}
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: output/MobileCloud-v${{ github.run_number }}.apk
           retention-days: 30
 
       - name: Create GitHub Release
@@ -76,6 +87,5 @@ jobs:
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: MobileCloud v1.0.${{ github.run_number }}
-          files: android/app/build/outputs/apk/release/app-release.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: output/MobileCloud-v${{ github.run_number }}.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
