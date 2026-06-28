@@ -36,22 +36,11 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Write Android local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          cat android/local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       - name: Write settings.gradle
         run: |
-          cat > android/settings.gradle << 'SGEOF'
-pluginManagement {
-    includeBuild("../node_modules/@react-native/gradle-plugin")
-}
-plugins { id("com.facebook.react.settings") }
-extensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }
-rootProject.name = 'mobilecloud'
-include ':app'
-includeBuild('../node_modules/@react-native/gradle-plugin')
-SGEOF
+          printf 'pluginManagement {\n    includeBuild("../node_modules/@react-native/gradle-plugin")\n}\nplugins { id("com.facebook.react.settings") }\nextensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }\nrootProject.name = '"'"'mobilecloud'"'"'\ninclude '"'"':app'"'"'\nincludeBuild("../node_modules/@react-native/gradle-plugin")\n' > android/settings.gradle
           cat android/settings.gradle
 
       - name: Generate debug keystore
@@ -75,7 +64,7 @@ SGEOF
             --entry-file index.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res/
-          echo "Bundle size: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
+          echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
       - name: Build Debug APK
         run: |
@@ -85,19 +74,19 @@ SGEOF
             --stacktrace \
             --rerun-tasks \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
-          echo "=== Build directory contents ==="
-          find app/build -name "*.apk" -o -name "output-metadata.json" 2>/dev/null || echo "No build dir"
-          ls -la app/build/outputs/ 2>/dev/null || echo "No outputs dir"
+          echo "=== APK search ==="
+          find . -name "*.apk" 2>/dev/null || true
+          find app/build -type f 2>/dev/null | head -30 || true
 
       - name: Find and verify APK
         run: |
-          find android -name "*.apk" -type f
           APK_PATH=$(find android -name "*.apk" -type f | head -1)
           if [ -z "$APK_PATH" ]; then
             echo "ERROR: No APK produced"
             find android/app -type d 2>/dev/null
             exit 1
           fi
+          echo "APK: $APK_PATH"
           ls -lh "$APK_PATH"
 
       - name: Copy APK to output
