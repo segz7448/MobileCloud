@@ -35,33 +35,35 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Write Android local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "local.properties written:"
+          cat android/local.properties
+
       - name: Write settings.gradle
         run: |
-          cat > android/settings.gradle << 'EOF'
-          pluginManagement {
-              includeBuild("../node_modules/@react-native/gradle-plugin")
-          }
-          plugins { id("com.facebook.react.settings") }
-          extensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }
-          rootProject.name = 'mobilecloud'
-          include ':app'
-          includeBuild('../node_modules/@react-native/gradle-plugin')
-          EOF
-          # Strip leading whitespace from heredoc
-          sed -i 's/^          //' android/settings.gradle
+          cat > android/settings.gradle << 'SGEOF'
+pluginManagement {
+    includeBuild("../node_modules/@react-native/gradle-plugin")
+}
+plugins { id("com.facebook.react.settings") }
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }
+rootProject.name = 'mobilecloud'
+include ':app'
+includeBuild('../node_modules/@react-native/gradle-plugin')
+SGEOF
           echo "=== settings.gradle ==="
           cat android/settings.gradle
 
       - name: Generate debug keystore
         run: |
-          if [ ! -f android/app/debug.keystore ]; then
-            keytool -genkey -v \
-              -keystore android/app/debug.keystore \
-              -alias androiddebugkey \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          keytool -genkey -v \
+            -keystore android/app/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
@@ -75,7 +77,8 @@ jobs:
             --entry-file index.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res/ \
-            --reset-cache || true
+            --reset-cache
+          ls -lh android/app/src/main/assets/
 
       - name: Build Debug APK
         run: |
@@ -83,20 +86,20 @@ jobs:
           ./gradlew assembleDebug \
             --no-daemon \
             --stacktrace \
-            --info \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
-            2>&1 | tail -100
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
 
-      - name: Find APK
+      - name: Find and verify APK
         run: |
           echo "=== Searching for APKs ==="
           find android -name "*.apk" -type f
           APK_COUNT=$(find android -name "*.apk" -type f | wc -l)
           echo "Found $APK_COUNT APK(s)"
           if [ "$APK_COUNT" -eq 0 ]; then
-            echo "ERROR: No APK was produced!"
+            echo "ERROR: No APK was produced by Gradle!"
+            find android/app/build -type f 2>/dev/null | head -50 || echo "No build output dir"
             exit 1
           fi
+          find android -name "*.apk" -exec ls -lh {} \;
 
       - name: Copy APK to output
         run: |
