@@ -4,14 +4,20 @@
     "slug": "mobilecloud",
     "version": "1.0.0",
     "owner": "segz7448s-team",
+    "sdkVersion": "51.0.0",
+    "platforms": ["android"],
+    "android": {
+      "package": "com.mobilecloud",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    },
     "extra": {
       "eas": {
         "projectId": "5098a671-781d-4bec-b9ca-eceb734b4890"
       }
     },
-    "android": {
-      "package": "com.mobilecloud",
-      "versionCode": 1
-    }
+    "plugins": []
   }
 }
