@@ -37,6 +37,8 @@ jobs:
       - name: Build APK with Gradle
         run: |
           cd android
+          ./gradlew projects
+          ./gradlew tasks --all
           ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Debug build output
