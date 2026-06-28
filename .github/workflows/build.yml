@@ -20,13 +20,15 @@ jobs:
           node-version: 18
 
       - name: Install EAS CLI
-        run: npm install -g eas-cli
+        run: npm install -g eas-cli@latest
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
       - name: Build APK with EAS
-        run: eas build --platform android --profile preview --local --output ./MobileCloud.apk --non-interactive
+        run: |
+          eas build --platform android --profile preview --local \
+            --output ./MobileCloud.apk --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
