@@ -1,26 +1,49 @@
 name: Build MobileCloud APK
+
 on:
   push:
     branches: [main, master]
   workflow_dispatch:
+
 jobs:
   build-apk:
+    name: Build Release APK
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
+          node-version: 18
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-      - name: Build APK
-        run: eas build --platform android --profile preview --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      - uses: actions/upload-artifact@v4
+
+      - name: Build APK with EAS
+        run: eas build --platform android --profile preview --local --output ./MobileCloud.apk --non-interactive
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
           name: MobileCloud-APK-${{ github.run_number }}
-          path: ./*.apk
+          path: ./MobileCloud.apk
           retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: MobileCloud v1.0.${{ github.run_number }}
+          files: ./MobileCloud.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
