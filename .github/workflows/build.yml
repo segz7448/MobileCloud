@@ -54,28 +54,10 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Bundle JS via Metro
-        run: |
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --entry-file index.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res/ \
-            --config metro.config.js \
-            --reset-cache 2>&1 | tail -20
-          BUNDLE_SIZE=$(wc -c < android/app/src/main/assets/index.android.bundle)
-          echo "JS bundle size: $BUNDLE_SIZE bytes"
-          if [ "$BUNDLE_SIZE" -lt 1000 ]; then
-            echo "ERROR: Bundle too small, likely failed"
-            exit 1
-          fi
-
-      - name: Build Debug APK
+      - name: Build Debug APK (with JS bundling)
         run: |
           cd android
-          ./gradlew :app:assembleDebug \
+          ./gradlew :app:bundleDebugJsAndAssets :app:assembleDebug \
             --no-daemon \
             --stacktrace \
             --info \
@@ -87,10 +69,11 @@ jobs:
           APK=$(find / -name "*.apk" -type f 2>/dev/null | grep -v proc | head -1)
           if [ -z "$APK" ]; then
             echo "ERROR: No APK found"
+            find android/app/build -type f 2>/dev/null | head -30 || echo "No build dir"
             exit 1
           fi
+          echo "APK: $APK ($(ls -lh "$APK" | awk '{print $5}'))"
           echo "APK_PATH=$APK" >> $GITHUB_ENV
-          ls -lh "$APK"
 
       - name: Copy APK to output
         run: |
