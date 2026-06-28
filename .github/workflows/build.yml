@@ -18,6 +18,8 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+      - name: Generate fresh Android folder
+        run: npx react-native init TempApp --skip-install && cp -r TempApp/android ./android && rm -rf TempApp
       - name: Generate debug keystore
         working-directory: ./android/app
         run: |
