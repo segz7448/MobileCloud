@@ -28,29 +28,46 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install EAS CLI
-        run: npm install -g eas-cli@latest
-
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Prebuild Android
-        run: npx expo prebuild --platform android --clean
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-
-      - name: Build APK with EAS local
+      - name: Restore settings.gradle
         run: |
-          eas build --platform android --profile preview --local \
-            --output ./MobileCloud.apk --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          cat > android/settings.gradle << 'SETTINGSEOF'
+          pluginManagement {
+              includeBuild("../node_modules/@react-native/gradle-plugin")
+          }
+          plugins { id("com.facebook.react.settings") }
+          extensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }
+          rootProject.name = 'mobilecloud'
+          include ':app'
+          includeBuild('../node_modules/@react-native/gradle-plugin')
+          SETTINGSEOF
+          echo "settings.gradle restored"
+
+      - name: Generate debug keystore
+        run: |
+          keytool -genkey -v \
+            -keystore android/app/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: MobileCloud-APK-${{ github.run_number }}
-          path: ./MobileCloud.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
       - name: Create GitHub Release
@@ -59,6 +76,6 @@ jobs:
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: MobileCloud v1.0.${{ github.run_number }}
-          files: ./MobileCloud.apk
+          files: android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
