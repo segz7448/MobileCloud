@@ -1,2 +1,2 @@
-rootProject.name = 'MobileCloud'
-include ':app'
+rootProject.name = "MobileCloud"
+include(":app")
