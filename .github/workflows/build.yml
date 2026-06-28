@@ -55,18 +55,10 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Bundle JS
-        run: |
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --entry-file index.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res/
-          echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
-
-      - name: Build Debug APK
+      - name: Build Debug APK (Gradle bundles JS internally)
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          NODE_ENV: production
         run: |
           cd android
           ./gradlew :app:assembleDebug \
@@ -74,16 +66,13 @@ jobs:
             --stacktrace \
             --rerun-tasks \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
-          echo "=== APK search ==="
-          find . -name "*.apk" 2>/dev/null || true
-          find app/build -type f 2>/dev/null | head -30 || true
 
       - name: Find and verify APK
         run: |
           APK_PATH=$(find android -name "*.apk" -type f | head -1)
           if [ -z "$APK_PATH" ]; then
             echo "ERROR: No APK produced"
-            find android/app -type d 2>/dev/null
+            find android/app/build -type d 2>/dev/null | head -20
             exit 1
           fi
           echo "APK: $APK_PATH"
