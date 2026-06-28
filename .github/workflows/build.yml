@@ -41,10 +41,10 @@ jobs:
 
       - name: Debug build output
         run: |
-          echo "--- Listing android/app/build (up to 4 levels) ---"
-          find android/app/build -maxdepth 4 2>&1  echo "build dir doesn't exist at all"
-          echo "--- Listing android/app/build/outputs if present ---"
-          find android/app/build/outputs 2>&1  echo "outputs dir doesn't exist"
+          echo "LISTING android/app/build"
+          find android/app/build -maxdepth 4
+          echo "LISTING android/app/build/outputs"
+          find android/app/build/outputs
 
       - name: Upload APK artifact
         if: always()
