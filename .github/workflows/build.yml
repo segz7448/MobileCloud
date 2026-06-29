@@ -40,7 +40,16 @@ jobs:
 
       - name: Write settings.gradle
         run: |
-          printf 'pluginManagement {\n    includeBuild("../node_modules/@react-native/gradle-plugin")\n}\nplugins { id("com.facebook.react.settings") }\nextensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }\nrootProject.name = '"'"'mobilecloud'"'"'\ninclude '"'"':app'"'"'\nincludeBuild("../node_modules/@react-native/gradle-plugin")\n' > android/settings.gradle
+          cat > android/settings.gradle << 'GRADLE_EOF'
+          pluginManagement {
+              includeBuild("../node_modules/@react-native/gradle-plugin")
+          }
+          plugins { id("com.facebook.react.settings") }
+          extensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }
+          rootProject.name = 'mobilecloud'
+          include ':app'
+          includeBuild("../node_modules/@react-native/gradle-plugin")
+          GRADLE_EOF
 
       - name: Generate debug keystore
         run: |
@@ -66,64 +75,51 @@ jobs:
             --reset-cache
           echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
-      - name: Build APK (capture full log)
-        continue-on-error: true
+      - name: Build APK
         run: |
           cd android
           ./gradlew :app:assembleDebug \
             --no-daemon \
-            --rerun-tasks \
             --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
-            > /tmp/gradle_full.txt 2>&1
-          echo "GRADLE_EXIT=$?" >> $GITHUB_ENV
-          echo "Last 100 lines:"
-          tail -100 /tmp/gradle_full.txt
+            2>&1 | tee /tmp/gradle_full.txt
+          # Exit code of the pipeline (tee) — get the real gradle exit
+          exit ${PIPESTATUS[0]}
 
-      - name: Upload Gradle log as artifact
+      - name: Upload Gradle log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gradle-log-${{ github.run_number }}
           path: /tmp/gradle_full.txt
           retention-days: 7
 
-      - name: Check build result and find APK
+      - name: Find and stage APK
         run: |
-          echo "Gradle exit was: $GRADLE_EXIT"
-          if [ "$GRADLE_EXIT" != "0" ]; then
-            echo "=== GRADLE FAILED - Key errors ==="
-            grep -E "^(FAILURE|> Task|Caused by:|e: )" /tmp/gradle_full.txt | head -40
-            exit 1
-          fi
           APK=$(find android -name "*.apk" -type f | head -1)
           if [ -z "$APK" ]; then
-            echo "No APK found"
+            echo "ERROR: No APK found after build"
+            find android -name "*.apk" 2>/dev/null || echo "No apk files anywhere"
             exit 1
           fi
-          echo "APK: $APK ($(wc -c < "$APK") bytes)"
-          echo "APK_PATH=$APK" >> $GITHUB_ENV
-
-      - name: Copy and upload APK
-        if: env.APK_PATH != ''
-        run: |
+          echo "Found APK: $APK ($(wc -c < "$APK") bytes)"
           mkdir -p output
-          cp "$APK_PATH" output/MobileCloud-v${{ github.run_number }}.apk
-          ls -lh output/
+          cp "$APK" output/MobileCloud-v${{ github.run_number }}.apk
+          echo "APK_PATH=output/MobileCloud-v${{ github.run_number }}.apk" >> $GITHUB_ENV
 
       - name: Upload APK artifact
-        if: env.APK_PATH != ''
         uses: actions/upload-artifact@v4
         with:
           name: MobileCloud-APK-${{ github.run_number }}
-          path: output/MobileCloud-v${{ github.run_number }}.apk
+          path: ${{ env.APK_PATH }}
           retention-days: 30
 
       - name: Create GitHub Release
-        if: env.APK_PATH != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: MobileCloud v1.0.${{ github.run_number }}
-          files: output/MobileCloud-v${{ github.run_number }}.apk
+          files: ${{ env.APK_PATH }}
           token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_unmatched_files: true
