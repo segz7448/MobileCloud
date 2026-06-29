@@ -5,7 +5,9 @@
   "scripts": {
     "android": "react-native run-android",
     "start": "react-native start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "bundle:android": "expo export:embed --platform android --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/",
+    "bundle:android:rn": "react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/ --reset-cache"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.2",
