@@ -64,37 +64,46 @@ jobs:
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res/ \
             --reset-cache
-          echo "Bundle size: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
+          echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
+
+      - name: List available Gradle tasks
+        run: |
+          cd android
+          ./gradlew :app:tasks --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx2g" \
+            2>/dev/null | grep -E "^[a-z].*Debug" | head -30 || true
 
       - name: Build Debug APK
         run: |
           set -e
           cd android
-          ./gradlew :app:assembleDebug \
+          ./gradlew :app:packageDebug :app:assembleDebug \
             --no-daemon \
             --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
-            > /tmp/gradle.txt 2>&1
-          echo "=== Last 80 lines of gradle output ==="
-          tail -80 /tmp/gradle.txt
-          echo "=== APK search after gradle ==="
-          find . -name "*.apk" 2>/dev/null || echo "No APK in project"
-          find /home -name "*.apk" 2>/dev/null || echo "No APK in /home"
-          find / -maxdepth 6 -name "*.apk" 2>/dev/null | grep -v proc | grep -v toolcache || echo "No APK found"
+            2>&1 | tee /tmp/gradle.txt
+          echo "=== EXIT: $? ==="
+          echo "=== Last 100 lines ==="
+          tail -100 /tmp/gradle.txt
+          echo "=== build outputs ==="
+          find app/build/outputs -type f 2>/dev/null | sort || echo "No outputs dir"
 
       - name: Find APK
         run: |
-          APK=$(find / -maxdepth 8 -name "*.apk" -type f 2>/dev/null | grep -v proc | grep -v toolcache | grep -v "^/usr" | head -1)
+          echo "=== searching android/ ==="
+          find android -name "*.apk" 2>/dev/null
+          APK=$(find android -name "*.apk" -type f | sort -k1,1 -t/ | head -1)
           if [ -z "$APK" ]; then
-            echo "No APK found. Gradle output:"
-            cat /tmp/gradle.txt | tail -100
+            echo "=== searching everywhere (depth 10) ==="
+            find / -maxdepth 10 -name "*.apk" -type f 2>/dev/null | grep -v proc | grep -v toolcache | grep -v "/usr/"
+            APK=$(find / -maxdepth 10 -name "*.apk" -type f 2>/dev/null | grep -v proc | grep -v toolcache | grep -v "/usr/" | head -1)
+          fi
+          if [ -z "$APK" ]; then
+            echo "ERROR: No APK found. Gradle log tail:"
+            tail -150 /tmp/gradle.txt
             exit 1
           fi
-          SIZE=$(wc -c < "$APK")
-          echo "✓ APK: $APK ($SIZE bytes)"
-          if [ "$SIZE" -lt 100000 ]; then
-            echo "WARNING: APK only $SIZE bytes, likely no JS bundle"
-          fi
+          echo "APK: $APK ($(wc -c < "$APK") bytes)"
           echo "APK_PATH=$APK" >> $GITHUB_ENV
 
       - name: Copy and upload
