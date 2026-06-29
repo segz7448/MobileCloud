@@ -32,18 +32,21 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+
+      - name: Regenerate Gradle wrapper
+        run: |
+          cd android
+          gradle wrapper --gradle-version 8.6 --distribution-type all
+          chmod +x gradlew
+          echo "=== Wrapper jar size ==="
+          ls -la gradle/wrapper/gradle-wrapper.jar
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-
-      - name: Check key node_modules
-        run: |
-          echo "=== Checking expo autolinking ==="
-          ls node_modules/expo/scripts/ 2>/dev/null || echo "expo/scripts NOT FOUND"
-          ls node_modules/expo-modules-autolinking/ 2>/dev/null | head -5 || echo "expo-modules-autolinking NOT FOUND"
-          echo "=== RN gradle plugin ==="
-          ls node_modules/@react-native/gradle-plugin/ 2>/dev/null | head -5 || echo "@react-native/gradle-plugin NOT FOUND"
-          echo "=== expo package.json ==="
-          cat node_modules/expo/package.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('expo version:', d['version'])" || echo "expo NOT FOUND"
 
       - name: Write local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
@@ -56,9 +59,6 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
             -dname "CN=Android Debug,O=Android,C=US"
-
-      - name: Make Gradle executable
-        run: chmod +x android/gradlew
 
       - name: Bundle JS
         run: |
@@ -84,24 +84,21 @@ jobs:
             2>&1 | tee /tmp/gradle_full.txt
           echo "build_exit=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-      - name: Commit build log for inspection
+      - name: Commit build log on failure
         if: steps.gradle_build.outputs.build_exit != '0'
         run: |
           git config user.email "ci@github.com"
           git config user.name "CI"
           mkdir -p .debug
-          cp /tmp/gradle_full.txt .debug/gradle_log_${{ github.run_number }}.txt 2>/dev/null || echo "No log file" > .debug/gradle_log_${{ github.run_number }}.txt
+          tail -100 /tmp/gradle_full.txt > .debug/gradle_log_${{ github.run_number }}.txt 2>/dev/null || echo "No log file" > .debug/gradle_log_${{ github.run_number }}.txt
           echo "Exit: ${{ steps.gradle_build.outputs.build_exit }}" >> .debug/gradle_log_${{ github.run_number }}.txt
           git add .debug/
-          git commit -m "debug: gradle log run #${{ github.run_number }}" || echo "nothing to commit"
-          git push
+          git commit -m "debug: gradle log run #${{ github.run_number }}" || true
+          git push || true
 
       - name: Fail if build failed
         if: steps.gradle_build.outputs.build_exit != '0'
-        run: |
-          echo "Build failed with exit code ${{ steps.gradle_build.outputs.build_exit }}"
-          cat /tmp/gradle_full.txt | tail -50
-          exit 1
+        run: exit 1
 
       - name: Find and stage APK
         run: |
