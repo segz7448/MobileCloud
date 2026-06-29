@@ -2,10 +2,6 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
-// Expo autolinking - required for expo-modules-core
-apply from: "../node_modules/expo/scripts/autolinking.gradle"
-useExpoModules()
-
 react {
     autolinkLibrariesWithApp()
 }
