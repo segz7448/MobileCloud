@@ -38,19 +38,6 @@ jobs:
       - name: Write local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
-      - name: Write settings.gradle
-        run: |
-          cat > android/settings.gradle << 'GRADLE_EOF'
-          pluginManagement {
-              includeBuild("../node_modules/@react-native/gradle-plugin")
-          }
-          plugins { id("com.facebook.react.settings") }
-          extensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }
-          rootProject.name = 'mobilecloud'
-          include ':app'
-          includeBuild("../node_modules/@react-native/gradle-plugin")
-          GRADLE_EOF
-
       - name: Generate debug keystore
         run: |
           keytool -genkey -v \
@@ -62,6 +49,13 @@ jobs:
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
+
+      - name: Show settings.gradle
+        run: |
+          echo "=== android/settings.gradle ==="
+          cat android/settings.gradle
+          echo "=== android/app/build.gradle ==="
+          cat android/app/build.gradle
 
       - name: Bundle JS
         run: |
@@ -116,7 +110,7 @@ jobs:
           fi
 
           if [ -z "$APK" ]; then
-            echo "ERROR: No APK found. Build may have failed silently."
+            echo "ERROR: No APK found"
             exit 1
           fi
 
