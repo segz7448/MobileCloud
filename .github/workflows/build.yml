@@ -33,14 +33,22 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: |
+          npm install --legacy-peer-deps
+          echo "Node: $(node --version), NPM: $(npm --version)"
+          echo "Expo CLI: $(npx expo --version 2>/dev/null || echo 'not found')"
+          echo "RN CLI: $(npx react-native --version 2>/dev/null || echo 'not found')"
 
       - name: Write local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          cat android/local.properties
 
       - name: Write settings.gradle
         run: |
           printf 'pluginManagement {\n    includeBuild("../node_modules/@react-native/gradle-plugin")\n}\nplugins { id("com.facebook.react.settings") }\nextensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }\nrootProject.name = '"'"'mobilecloud'"'"'\ninclude '"'"':app'"'"'\nincludeBuild("../node_modules/@react-native/gradle-plugin")\n' > android/settings.gradle
+          cat android/settings.gradle
 
       - name: Generate debug keystore
         run: |
@@ -54,36 +62,79 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
+      - name: Create assets directory
+        run: mkdir -p android/app/src/main/assets
+
+      - name: Bundle JS (try expo first, fallback to react-native)
+        run: |
+          BUNDLE_OUT="android/app/src/main/assets/index.android.bundle"
+          ASSETS_DEST="android/app/src/main/res"
+
+          echo "=== Attempting expo export:embed ==="
+          if npx expo export:embed \
+            --platform android \
+            --entry-file index.js \
+            --bundle-output "$BUNDLE_OUT" \
+            --assets-dest "$ASSETS_DEST" \
+            --dev false 2>&1; then
+            echo "expo export:embed succeeded"
+          else
+            echo "expo export:embed failed, trying react-native bundle..."
+            npx react-native bundle \
+              --platform android \
+              --dev false \
+              --entry-file index.js \
+              --bundle-output "$BUNDLE_OUT" \
+              --assets-dest "$ASSETS_DEST" \
+              --config metro.config.js \
+              --reset-cache 2>&1
+          fi
+
+          if [ -f "$BUNDLE_OUT" ]; then
+            SIZE=$(wc -c < "$BUNDLE_OUT")
+            echo "✓ Bundle created: $SIZE bytes"
+            if [ "$SIZE" -lt 10000 ]; then
+              echo "ERROR: Bundle too small ($SIZE bytes)"
+              exit 1
+            fi
+          else
+            echo "ERROR: No bundle file created"
+            exit 1
+          fi
+
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew :app:bundleDebugJsAndAssets :app:assembleDebug \
+          echo "=== Starting Gradle assembleDebug ==="
+          ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
             --info \
             --rerun-tasks \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
-          echo "=== Build output directory ==="
-          find app/build/outputs -type f 2>/dev/null | head -30 || echo "No outputs dir"
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
+            2>&1 | tee /tmp/gradle_output.txt | tail -80
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "Gradle exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "=== GRADLE ERRORS ==="
+            grep -E "^(FAILURE|error:|Caused by:|> )" /tmp/gradle_output.txt | head -30
+            exit $EXIT_CODE
+          fi
 
-      - name: Locate and validate APK
+      - name: Find APK
         run: |
-          echo "=== Searching android/ only ==="
-          find android -name "*.apk" -type f 2>/dev/null || echo "None in android/"
-          APK=$(find android -name "*.apk" -type f | head -1)
+          echo "=== APK search in project ==="
+          find . -name "*.apk" -type f 2>/dev/null | grep -v node_modules
+          APK=$(find . -name "*.apk" -type f 2>/dev/null | grep -v node_modules | head -1)
           if [ -z "$APK" ]; then
-            echo "ERROR: No APK in android/ build output"
-            echo "=== Full gradle build dir ==="
-            find android/app/build -type f 2>/dev/null | head -50
+            echo "=== No APK in project dir. Checking build outputs: ==="
+            find android/app/build -type f 2>/dev/null | head -30
+            echo "=== Gradle output tail ==="
+            tail -50 /tmp/gradle_output.txt
             exit 1
           fi
           SIZE=$(wc -c < "$APK")
-          echo "APK: $APK ($SIZE bytes)"
-          if [ "$SIZE" -lt 500000 ]; then
-            echo "WARNING: APK is only ${SIZE} bytes - may be missing JS bundle"
-            echo "Checking for bundle in build dir..."
-            find android/app/build -name "*.bundle" 2>/dev/null || echo "No bundle found"
-          fi
+          echo "APK found: $APK ($SIZE bytes)"
           echo "APK_PATH=$APK" >> $GITHUB_ENV
 
       - name: Copy APK to output
