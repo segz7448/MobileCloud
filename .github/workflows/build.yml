@@ -35,6 +35,16 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Check key node_modules
+        run: |
+          echo "=== Checking expo autolinking ==="
+          ls node_modules/expo/scripts/ 2>/dev/null || echo "expo/scripts NOT FOUND"
+          ls node_modules/expo-modules-autolinking/ 2>/dev/null | head -5 || echo "expo-modules-autolinking NOT FOUND"
+          echo "=== RN gradle plugin ==="
+          ls node_modules/@react-native/gradle-plugin/ 2>/dev/null | head -5 || echo "@react-native/gradle-plugin NOT FOUND"
+          echo "=== expo package.json ==="
+          cat node_modules/expo/package.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('expo version:', d['version'])" || echo "expo NOT FOUND"
+
       - name: Write local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
@@ -63,20 +73,42 @@ jobs:
           echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
       - name: Build APK
+        id: gradle_build
+        continue-on-error: true
         run: |
           cd android
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
+            2>&1 | tee /tmp/gradle_full.txt
+          echo "build_exit=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      - name: Commit build log for inspection
+        if: steps.gradle_build.outputs.build_exit != '0'
+        run: |
+          git config user.email "ci@github.com"
+          git config user.name "CI"
+          mkdir -p .debug
+          cp /tmp/gradle_full.txt .debug/gradle_log_${{ github.run_number }}.txt 2>/dev/null || echo "No log file" > .debug/gradle_log_${{ github.run_number }}.txt
+          echo "Exit: ${{ steps.gradle_build.outputs.build_exit }}" >> .debug/gradle_log_${{ github.run_number }}.txt
+          git add .debug/
+          git commit -m "debug: gradle log run #${{ github.run_number }}" || echo "nothing to commit"
+          git push
+
+      - name: Fail if build failed
+        if: steps.gradle_build.outputs.build_exit != '0'
+        run: |
+          echo "Build failed with exit code ${{ steps.gradle_build.outputs.build_exit }}"
+          cat /tmp/gradle_full.txt | tail -50
+          exit 1
 
       - name: Find and stage APK
         run: |
           APK=""
           for candidate in \
             "android/app/build/outputs/apk/debug/app-debug.apk" \
-            "android/app/build/outputs/apk/release/app-release.apk" \
-            "android/app/build/outputs/apk/release/app-release-unsigned.apk"; do
+            "android/app/build/outputs/apk/release/app-release.apk"; do
             if [ -f "$candidate" ]; then
               APK="$candidate"
               break
@@ -87,7 +119,6 @@ jobs:
           fi
           if [ -z "$APK" ]; then
             echo "ERROR: No APK found"
-            find android -name "*.apk" 2>/dev/null || echo "none"
             exit 1
           fi
           echo "Found: $APK ($(wc -c < "$APK") bytes)"
