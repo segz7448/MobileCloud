@@ -66,67 +66,52 @@ jobs:
             --reset-cache
           echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
-      - name: Build and verify APK
+      - name: Build APK (capture full log)
+        continue-on-error: true
         run: |
-          set -e
-          WORK_DIR="$(pwd)"
-          echo "Working dir: $WORK_DIR"
-
           cd android
-          echo "Android dir: $(pwd)"
-
-          # Run gradle
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --rerun-tasks \
             --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
-            2>&1 | tee /tmp/gradle.txt
+            > /tmp/gradle_full.txt 2>&1
+          echo "GRADLE_EXIT=$?" >> $GITHUB_ENV
+          echo "Last 100 lines:"
+          tail -100 /tmp/gradle_full.txt
 
-          GRADLE_EXIT=${PIPESTATUS[0]}
-          echo "Gradle exit: $GRADLE_EXIT"
+      - name: Upload Gradle log as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-log-${{ github.run_number }}
+          path: /tmp/gradle_full.txt
+          retention-days: 7
 
-          # Show what tasks ran
-          echo "=== Tasks executed ==="
-          grep "^> Task" /tmp/gradle.txt | head -50
-
-          echo "=== BUILD line ==="
-          grep "^BUILD" /tmp/gradle.txt || echo "No BUILD line"
-
-          echo "=== app/build/outputs ==="
-          ls -la "$WORK_DIR/android/app/build/outputs/" 2>/dev/null || echo "outputs dir missing"
-          find "$WORK_DIR/android/app/build" -name "*.apk" 2>/dev/null || echo "No APKs in build dir"
-
-          echo "=== PWD APK search ==="
-          find . -name "*.apk" 2>/dev/null
-
-          echo "=== Errors in gradle log ==="
-          grep -i "error\|failed\|exception" /tmp/gradle.txt | grep -v "^>" | head -20
-
-          if [ "$GRADLE_EXIT" -ne 0 ]; then
-            tail -100 /tmp/gradle.txt
-            exit $GRADLE_EXIT
-          fi
-
-          # Find APK
-          APK=$(find "$WORK_DIR/android" -name "*.apk" -type f 2>/dev/null | head -1)
-          if [ -z "$APK" ]; then
-            echo "ERROR: No APK after gradle success!"
-            echo "build dir listing:"
-            find "$WORK_DIR/android/app/build" -type f 2>/dev/null | sort | head -100
+      - name: Check build result and find APK
+        run: |
+          echo "Gradle exit was: $GRADLE_EXIT"
+          if [ "$GRADLE_EXIT" != "0" ]; then
+            echo "=== GRADLE FAILED - Key errors ==="
+            grep -E "^(FAILURE|> Task|Caused by:|e: )" /tmp/gradle_full.txt | head -40
             exit 1
           fi
-
+          APK=$(find android -name "*.apk" -type f | head -1)
+          if [ -z "$APK" ]; then
+            echo "No APK found"
+            exit 1
+          fi
+          echo "APK: $APK ($(wc -c < "$APK") bytes)"
           echo "APK_PATH=$APK" >> $GITHUB_ENV
-          echo "✓ APK: $APK ($(wc -c < "$APK") bytes)"
 
-      - name: Copy and upload
+      - name: Copy and upload APK
+        if: env.APK_PATH != ''
         run: |
           mkdir -p output
           cp "$APK_PATH" output/MobileCloud-v${{ github.run_number }}.apk
           ls -lh output/
 
       - name: Upload APK artifact
+        if: env.APK_PATH != ''
         uses: actions/upload-artifact@v4
         with:
           name: MobileCloud-APK-${{ github.run_number }}
@@ -134,7 +119,7 @@ jobs:
           retention-days: 30
 
       - name: Create GitHub Release
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        if: env.APK_PATH != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
