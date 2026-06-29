@@ -62,42 +62,13 @@ jobs:
             --reset-cache
           echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
-      - name: Gradle diagnostics
-        run: |
-          echo "=== Java version ==="
-          java -version
-          echo "=== JAVA_HOME ==="
-          echo $JAVA_HOME
-          echo "=== gradlew first 5 lines ==="
-          head -5 android/gradlew
-          echo "=== gradle-wrapper.jar exists? ==="
-          ls -la android/gradle/wrapper/
-          echo "=== gradle-wrapper.properties ==="
-          cat android/gradle/wrapper/gradle-wrapper.properties
-          echo "=== settings.gradle ==="
-          cat android/settings.gradle
-          echo "=== Test running gradlew directly ==="
-          cd android && ./gradlew --version 2>&1 || echo "gradlew --version FAILED with exit $?"
-
       - name: Build APK
         run: |
           cd android
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
-            2>&1 | tee /tmp/gradle_full.txt
-          BUILD_EXIT=${PIPESTATUS[0]}
-          echo "Gradle exit: $BUILD_EXIT"
-          exit $BUILD_EXIT
-
-      - name: Upload Gradle log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-log-${{ github.run_number }}
-          path: /tmp/gradle_full.txt
-          retention-days: 7
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m"
 
       - name: Find and stage APK
         run: |
