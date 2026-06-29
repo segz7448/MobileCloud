@@ -17,4 +17,14 @@ buildscript {
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
     }
 }
+
+// Configure all subprojects to use correct repositories
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://www.jitpack.io" }
+    }
+}
+
 apply plugin: "com.facebook.react.rootproject"
