@@ -2,17 +2,8 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
-/**
- * React Native and Expo configuration
- */
 react {
-    /* The entry JS file */
-    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", rootDir.absolutePath, "android", "absolute"].execute(null, rootDir).text.trim())
-    /* Enable hermes */
     hermesEnabled = (findProperty('hermesEnabled') ?: true).toBoolean()
-    /* Bundle command - use expo's bundler for bare workflow */
-    bundleCommand = "export:embed"
-    /* Auto-link all libraries */
     autolinkLibrariesWithApp()
 }
 
