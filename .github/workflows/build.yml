@@ -64,50 +64,38 @@ jobs:
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res/ \
             --reset-cache
-          BUNDLE_SIZE=$(wc -c < android/app/src/main/assets/index.android.bundle)
-          echo "✓ Bundle: $BUNDLE_SIZE bytes"
+          echo "Bundle size: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
       - name: Build Debug APK
         run: |
+          set -e
           cd android
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
-            --info \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
-            2>&1 | tee /tmp/gradle.txt
-          EXIT_CODE=${PIPESTATUS[0]}
-          echo "=== Gradle exit code: $EXIT_CODE ==="
-          echo "=== APK-related lines from Gradle ==="
-          grep -i "apk\|output\|assemble\|sign\|packag" /tmp/gradle.txt | tail -30
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            echo "=== ERRORS ==="
-            grep -E "FAILED|error:|Caused by:" /tmp/gradle.txt | head -20
-            exit $EXIT_CODE
-          fi
+            > /tmp/gradle.txt 2>&1
+          echo "=== Last 80 lines of gradle output ==="
+          tail -80 /tmp/gradle.txt
+          echo "=== APK search after gradle ==="
+          find . -name "*.apk" 2>/dev/null || echo "No APK in project"
+          find /home -name "*.apk" 2>/dev/null || echo "No APK in /home"
+          find / -maxdepth 6 -name "*.apk" 2>/dev/null | grep -v proc | grep -v toolcache || echo "No APK found"
 
-      - name: Find APK (everywhere)
+      - name: Find APK
         run: |
-          echo "=== APKs in android/ ==="
-          find android -name "*.apk" -type f 2>/dev/null || echo "None"
-          echo "=== APKs in /home ==="
-          find /home -name "*.apk" -type f 2>/dev/null || echo "None"
-          echo "=== APKs in /tmp ==="
-          find /tmp -name "*.apk" -type f 2>/dev/null || echo "None"
-          echo "=== APKs in /root ==="
-          find /root -name "*.apk" -type f 2>/dev/null || echo "None"
-          echo "=== android/app/build/ structure ==="
-          find android/app/build -type f 2>/dev/null | sort | head -50
-          echo "=== Searching everything ==="
-          APK=$(find / -name "*.apk" -type f 2>/dev/null | grep -v proc | grep -v "^/usr" | grep -v "^/opt/hostedtoolcache" | head -5)
-          echo "Found: $APK"
+          APK=$(find / -maxdepth 8 -name "*.apk" -type f 2>/dev/null | grep -v proc | grep -v toolcache | grep -v "^/usr" | head -1)
           if [ -z "$APK" ]; then
-            echo "ERROR: No APK found anywhere"
+            echo "No APK found. Gradle output:"
+            cat /tmp/gradle.txt | tail -100
             exit 1
           fi
-          REAL_APK=$(echo "$APK" | head -1)
-          echo "APK_PATH=$REAL_APK" >> $GITHUB_ENV
-          ls -lh "$REAL_APK"
+          SIZE=$(wc -c < "$APK")
+          echo "✓ APK: $APK ($SIZE bytes)"
+          if [ "$SIZE" -lt 100000 ]; then
+            echo "WARNING: APK only $SIZE bytes, likely no JS bundle"
+          fi
+          echo "APK_PATH=$APK" >> $GITHUB_ENV
 
       - name: Copy and upload
         run: |
