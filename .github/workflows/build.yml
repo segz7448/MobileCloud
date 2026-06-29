@@ -66,45 +66,59 @@ jobs:
             --reset-cache
           echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
-      - name: List available Gradle tasks
-        run: |
-          cd android
-          ./gradlew :app:tasks --no-daemon \
-            -Dorg.gradle.jvmargs="-Xmx2g" \
-            2>/dev/null | grep -E "^[a-z].*Debug" | head -30 || true
-
-      - name: Build Debug APK
+      - name: Build and verify APK
         run: |
           set -e
+          WORK_DIR="$(pwd)"
+          echo "Working dir: $WORK_DIR"
+
           cd android
-          ./gradlew :app:packageDebug :app:assembleDebug \
+          echo "Android dir: $(pwd)"
+
+          # Run gradle
+          ./gradlew :app:assembleDebug \
             --no-daemon \
+            --rerun-tasks \
             --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
             2>&1 | tee /tmp/gradle.txt
-          echo "=== EXIT: $? ==="
-          echo "=== Last 100 lines ==="
-          tail -100 /tmp/gradle.txt
-          echo "=== build outputs ==="
-          find app/build/outputs -type f 2>/dev/null | sort || echo "No outputs dir"
 
-      - name: Find APK
-        run: |
-          echo "=== searching android/ ==="
-          find android -name "*.apk" 2>/dev/null
-          APK=$(find android -name "*.apk" -type f | sort -k1,1 -t/ | head -1)
-          if [ -z "$APK" ]; then
-            echo "=== searching everywhere (depth 10) ==="
-            find / -maxdepth 10 -name "*.apk" -type f 2>/dev/null | grep -v proc | grep -v toolcache | grep -v "/usr/"
-            APK=$(find / -maxdepth 10 -name "*.apk" -type f 2>/dev/null | grep -v proc | grep -v toolcache | grep -v "/usr/" | head -1)
+          GRADLE_EXIT=${PIPESTATUS[0]}
+          echo "Gradle exit: $GRADLE_EXIT"
+
+          # Show what tasks ran
+          echo "=== Tasks executed ==="
+          grep "^> Task" /tmp/gradle.txt | head -50
+
+          echo "=== BUILD line ==="
+          grep "^BUILD" /tmp/gradle.txt || echo "No BUILD line"
+
+          echo "=== app/build/outputs ==="
+          ls -la "$WORK_DIR/android/app/build/outputs/" 2>/dev/null || echo "outputs dir missing"
+          find "$WORK_DIR/android/app/build" -name "*.apk" 2>/dev/null || echo "No APKs in build dir"
+
+          echo "=== PWD APK search ==="
+          find . -name "*.apk" 2>/dev/null
+
+          echo "=== Errors in gradle log ==="
+          grep -i "error\|failed\|exception" /tmp/gradle.txt | grep -v "^>" | head -20
+
+          if [ "$GRADLE_EXIT" -ne 0 ]; then
+            tail -100 /tmp/gradle.txt
+            exit $GRADLE_EXIT
           fi
+
+          # Find APK
+          APK=$(find "$WORK_DIR/android" -name "*.apk" -type f 2>/dev/null | head -1)
           if [ -z "$APK" ]; then
-            echo "ERROR: No APK found. Gradle log tail:"
-            tail -150 /tmp/gradle.txt
+            echo "ERROR: No APK after gradle success!"
+            echo "build dir listing:"
+            find "$WORK_DIR/android/app/build" -type f 2>/dev/null | sort | head -100
             exit 1
           fi
-          echo "APK: $APK ($(wc -c < "$APK") bytes)"
+
           echo "APK_PATH=$APK" >> $GITHUB_ENV
+          echo "✓ APK: $APK ($(wc -c < "$APK") bytes)"
 
       - name: Copy and upload
         run: |
