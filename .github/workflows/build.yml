@@ -96,12 +96,24 @@ jobs:
 
       - name: Find and stage APK
         run: |
-          APK=$(find android -name "*.apk" -type f | head -1)
+          echo "=== Searching for APK files ==="
+          find . -name "*.apk" -type f 2>/dev/null || echo "No .apk files found anywhere"
+          echo "=== Expected output dir ==="
+          ls -la android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug output dir not found"
+          ls -la android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release output dir not found"
+
+          # Try the standard debug path first, then any apk
+          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          else
+            APK=$(find android/app/build -name "*.apk" -type f 2>/dev/null | head -1)
+          fi
+
           if [ -z "$APK" ]; then
             echo "ERROR: No APK found after build"
-            find android -name "*.apk" 2>/dev/null || echo "No apk files anywhere"
             exit 1
           fi
+
           echo "Found APK: $APK ($(wc -c < "$APK") bytes)"
           mkdir -p output
           cp "$APK" output/MobileCloud-v${{ github.run_number }}.apk
