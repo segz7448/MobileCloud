@@ -18,7 +18,6 @@ buildscript {
     }
 }
 
-// Configure all subprojects to use correct repositories
 allprojects {
     repositories {
         google()
