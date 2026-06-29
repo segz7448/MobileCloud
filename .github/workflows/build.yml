@@ -50,13 +50,6 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Show settings.gradle
-        run: |
-          echo "=== android/settings.gradle ==="
-          cat android/settings.gradle
-          echo "=== android/app/build.gradle ==="
-          cat android/app/build.gradle
-
       - name: Bundle JS
         run: |
           mkdir -p android/app/src/main/assets
@@ -69,15 +62,34 @@ jobs:
             --reset-cache
           echo "Bundle: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
+      - name: Gradle diagnostics
+        run: |
+          echo "=== Java version ==="
+          java -version
+          echo "=== JAVA_HOME ==="
+          echo $JAVA_HOME
+          echo "=== gradlew first 5 lines ==="
+          head -5 android/gradlew
+          echo "=== gradle-wrapper.jar exists? ==="
+          ls -la android/gradle/wrapper/
+          echo "=== gradle-wrapper.properties ==="
+          cat android/gradle/wrapper/gradle-wrapper.properties
+          echo "=== settings.gradle ==="
+          cat android/settings.gradle
+          echo "=== Test running gradlew directly ==="
+          cd android && ./gradlew --version 2>&1 || echo "gradlew --version FAILED with exit $?"
+
       - name: Build APK
         run: |
-          set -o pipefail
           cd android
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
             2>&1 | tee /tmp/gradle_full.txt
+          BUILD_EXIT=${PIPESTATUS[0]}
+          echo "Gradle exit: $BUILD_EXIT"
+          exit $BUILD_EXIT
 
       - name: Upload Gradle log
         if: always()
@@ -89,11 +101,6 @@ jobs:
 
       - name: Find and stage APK
         run: |
-          echo "=== Build output tree ==="
-          find android/app/build/outputs -type f 2>/dev/null || echo "outputs dir not found"
-          echo "=== All APK files ==="
-          find . -name "*.apk" -type f 2>/dev/null || echo "no apk files"
-
           APK=""
           for candidate in \
             "android/app/build/outputs/apk/debug/app-debug.apk" \
@@ -104,16 +111,14 @@ jobs:
               break
             fi
           done
-
           if [ -z "$APK" ]; then
             APK=$(find android/app/build -name "*.apk" -type f 2>/dev/null | head -1)
           fi
-
           if [ -z "$APK" ]; then
             echo "ERROR: No APK found"
+            find android -name "*.apk" 2>/dev/null || echo "none"
             exit 1
           fi
-
           echo "Found: $APK ($(wc -c < "$APK") bytes)"
           mkdir -p output
           cp "$APK" output/MobileCloud-v${{ github.run_number }}.apk
