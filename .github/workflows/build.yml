@@ -32,18 +32,13 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.6'
-
-      - name: Regenerate Gradle wrapper
+      - name: Download Gradle wrapper jar
         run: |
-          cd android
-          gradle wrapper --gradle-version 8.6 --distribution-type all
-          chmod +x gradlew
-          echo "=== Wrapper jar size ==="
-          ls -la gradle/wrapper/gradle-wrapper.jar
+          # Download the real gradle-wrapper.jar (was 0 bytes in repo)
+          GRADLE_VERSION="8.6"
+          JAR_URL="https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}.0/gradle/wrapper/gradle-wrapper.jar"
+          curl -fsSL "$JAR_URL" -o android/gradle/wrapper/gradle-wrapper.jar
+          ls -la android/gradle/wrapper/gradle-wrapper.jar
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -59,6 +54,9 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
             -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
 
       - name: Bundle JS
         run: |
@@ -90,7 +88,7 @@ jobs:
           git config user.email "ci@github.com"
           git config user.name "CI"
           mkdir -p .debug
-          tail -100 /tmp/gradle_full.txt > .debug/gradle_log_${{ github.run_number }}.txt 2>/dev/null || echo "No log file" > .debug/gradle_log_${{ github.run_number }}.txt
+          tail -150 /tmp/gradle_full.txt > .debug/gradle_log_${{ github.run_number }}.txt 2>/dev/null || echo "No log" > .debug/gradle_log_${{ github.run_number }}.txt
           echo "Exit: ${{ steps.gradle_build.outputs.build_exit }}" >> .debug/gradle_log_${{ github.run_number }}.txt
           git add .debug/
           git commit -m "debug: gradle log run #${{ github.run_number }}" || true
