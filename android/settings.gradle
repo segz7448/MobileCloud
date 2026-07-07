@@ -1,7 +1,8 @@
-rootProject.name = 'MobileCloud'
-
 pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
 plugins { id("com.facebook.react.settings") }
+
+rootProject.name = 'MobileCloud'
+
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex -> ex.autolinkLibrariesFromCommand() }
 
 include ':app'
